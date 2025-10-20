@@ -1,4 +1,6 @@
-﻿namespace PhotoGallery.Controllers.Gallery
+﻿using Microsoft.AspNetCore.Identity;
+
+namespace PhotoGallery.Controllers.Gallery
 {
     [Authorize]
     [Route("api/[controller]")]
@@ -70,7 +72,7 @@
         [EndpointSummary("Get By Id.")]
         public async Task<IActionResult> GetPhotoDetail(int id)
         {
-            var photo = await context.ViPhotos
+            ViPhoto? photo = await context.ViPhotos
                 .FirstOrDefaultAsync(p => p.Id == id);
 
             if (photo == null) return NotFound("Photo not found");
@@ -92,29 +94,22 @@
         [EndpointSummary("Photo Upload")]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadPhotoModel model)
         {
-            // Get user id manually from the JWT
-            var userId = User.FindFirstValue("UserId");
-            if (string.IsNullOrEmpty(userId))
-                return Unauthorized("Token is missing or invalid");
-
-            // Then find the user manually
-            var user = await userManager.FindByIdAsync(userId);
-            if (user == null)
-                return Unauthorized("User not found");
-
             if (model.File == null || model.File.Length == 0)
                 return BadRequest("No file uploaded");
+
+            IdentityUser? user = await userManager.GetUserAsync(User);
 
             using var ms = new MemoryStream();
             await model.File.CopyToAsync(ms);
 
-            var photo = new Photo
+            Photo photo = new()
             {
                 Title = model.Title,
                 Description = model.Description,
                 Location = model.Location,
-                OwnerId = user.Id,
+                OwnerId = user?.Id ?? "",
                 ImageData = ms.ToArray(),
+                Tagging = model.Tags,
                 UploadedDate = DateTime.Now
             };
             context.Photos.Add(photo);
@@ -123,11 +118,11 @@
             // Handle tags (comma-separated)
             if (!string.IsNullOrWhiteSpace(model.Tags))
             {
-                var tagNames = model.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                var photoTagMappings = new List<PhotoTag>();
+                string[] tagNames = model.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+                List<PhotoTag> photoTagMappings = [];
                 foreach (var name in tagNames)
                 {
-                    var tag = await context.Tags.FirstOrDefaultAsync(t => t.Name == name)
+                    Tag tag = await context.Tags.FirstOrDefaultAsync(t => t.Name == name)
                               ?? (await context.Tags.AddAsync(new Tag { Name = name })).Entity;
 
                     photoTagMappings.Add(new PhotoTag { PhotoId = photo.Id, TagId = tag.Id });
@@ -144,14 +139,20 @@
         [EndpointSummary("Delete Photo")]
         public async Task<IActionResult> DeletePhoto(int id)
         {
-            var user = await userManager.GetUserAsync(User);
-            var photo = await context.Photos.FirstOrDefaultAsync(p => p.Id == id);
+            IdentityUser? user = await userManager.GetUserAsync(User);
+            Photo? photo = await context.Photos.FirstOrDefaultAsync(p => p.Id == id);
 
             if (photo == null) return NotFound("Photo not found");
 
-            var isAdmin = await userManager.IsInRoleAsync(user!, "admin");
-            if (photo.OwnerId != user!.Id && !isAdmin)
+            bool isAdmin = await userManager.IsInRoleAsync(user!, "admin");
+            if (!isAdmin)
                 return Forbid("You are not authorized to delete this photo");
+
+            var photoTags = await context.PhotoTags.Where(pt => pt.PhotoId == id).ToListAsync();
+            if (photoTags.Any())
+            {
+                context.PhotoTags.RemoveRange(photoTags);
+            }
 
             context.Photos.Remove(photo);
             await context.SaveChangesAsync();
