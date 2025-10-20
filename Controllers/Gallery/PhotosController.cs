@@ -11,33 +11,37 @@ namespace PhotoGallery.Controllers.Gallery
         [EndpointSummary("Get Photos with Pagination")]
         [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
         public async Task<IActionResult> GetPhotosAsync(
-                     int skipRows = 0,
-                     int pageSize = 10,
-                     string? q = null,
-                     string? sortField = "UploadedDate",
-                     int order = -1
-                 )
+                int skipRows = 0,
+                int pageSize = 10,
+                string? q = null,
+                string? sortField = "UploadedDate",
+                int order = -1)
         {
-            IQueryable<ViPhoto> photosQuery = context.ViPhotos.AsNoTracking().AsQueryable();
+            // Base query
+            IQueryable<ViPhoto> query = context.ViPhotos.AsNoTracking();
 
             if (!string.IsNullOrWhiteSpace(q))
             {
-                photosQuery = photosQuery.Where(p =>
-                    p.Title.Contains(q) ||
-                    (p.Description ?? string.Empty).Contains(q) ||
-                    (p.OwnerName ?? string.Empty).Contains(q));
+                q = q.Trim();
+                query = query.Where(p =>
+                    EF.Functions.Like(p.Title, $"%{q}%") ||
+                    EF.Functions.Like(p.Description ?? string.Empty, $"%{q}%") ||
+                    EF.Functions.Like(p.OwnerName ?? string.Empty, $"%{q}%"));
             }
 
-            photosQuery = sortField?.ToLower() switch
+            //  Sorting 
+            query = sortField switch
             {
-                "title" => order == 1 ? photosQuery.OrderBy(p => p.Title) : photosQuery.OrderByDescending(p => p.Title),
-                "ownername" => order == 1 ? photosQuery.OrderBy(p => p.OwnerName) : photosQuery.OrderByDescending(p => p.OwnerName),
-                _ => order == 1 ? photosQuery.OrderBy(p => p.UploadedDate) : photosQuery.OrderByDescending(p => p.UploadedDate),
+                "Title" or "title" => order == 1 ? query.OrderBy(p => p.Title) : query.OrderByDescending(p => p.Title),
+                "OwnerName" or "ownername" => order == 1 ? query.OrderBy(p => p.OwnerName) : query.OrderByDescending(p => p.OwnerName),
+                _ => order == 1 ? query.OrderBy(p => p.UploadedDate) : query.OrderByDescending(p => p.UploadedDate)
             };
 
-            int recordsTotal = await photosQuery.CountAsync();
+            //  Count total records
+            var recordsTotal = await query.CountAsync();
 
-            var records = await photosQuery
+            //  Data fetch 
+            var records = await query
                 .Skip(skipRows)
                 .Take(pageSize)
                 .Select(p => new
@@ -48,24 +52,23 @@ namespace PhotoGallery.Controllers.Gallery
                     p.Location,
                     p.OwnerName,
                     UploadedDate = p.UploadedDate.ToString("yyyy-MM-dd"),
-                    Tags = p.Tagging != null
-                        ? p.Tagging.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                        : Array.Empty<string>(),
+                    Tags = string.IsNullOrEmpty(p.Tagging)
+                        ? Array.Empty<string>()
+                        : p.Tagging.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
                     Thumbnail = $"data:{GetImageMimeType(p.ImageData)};base64,{Convert.ToBase64String(p.ImageData)}"
                 })
                 .ToListAsync();
 
-            return ResponseHelper.OK_Result(new { records, recordsTotal },
+            return ResponseHelper.OK_Result(
+                new { records, recordsTotal },
                 new DefaultResponseMessageModel("Successfully retrieved photos.", "အောင်မြင်ပါသည်။"));
         }
 
         [HttpGet("tag")]
         [EndpointSummary("Get Tags")]
-        public async Task<IActionResult> GetTagsAsync() 
+        public async Task<IActionResult> GetTagsAsync()
         {
-            List<Tag> tag = await context.Tags.ToListAsync();
-
-            return ResponseHelper.OK_Result(tag, null);
+            return ResponseHelper.OK_Result(await context.Tags.ToListAsync(), null);
         }
 
         [HttpGet("{id}")]
@@ -87,51 +90,90 @@ namespace PhotoGallery.Controllers.Gallery
                 UploadedDate = photo.UploadedDate.ToString("yyyy-MM-dd"),
                 Tags = photo.Tagging != null ? photo.Tagging.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries) : [],
                 Thumbnail = $"data:{GetImageMimeType(photo.ImageData)};base64,{Convert.ToBase64String(photo.ImageData)}"
-            },new DefaultResponseMessageModel("Successfully Get Data.", "အောင်မြင်ပါသည်။"));
+            }, new DefaultResponseMessageModel("Successfully Get Data.", "အောင်မြင်ပါသည်။"));
         }
 
         [HttpPost("upload")]
         [EndpointSummary("Photo Upload")]
-        public async Task<IActionResult> UploadPhoto([FromForm] UploadPhotoModel model)
+        [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> UploadPhoto([FromForm] UploadPhotoModel model, CancellationToken cancellationToken)
         {
             if (model.File == null || model.File.Length == 0)
-                return BadRequest("No file uploaded");
+                return BadRequest("No file uploaded.");
 
-            IdentityUser? user = await userManager.GetUserAsync(User);
+            var user = await userManager.GetUserAsync(User);
 
-            using var ms = new MemoryStream();
-            await model.File.CopyToAsync(ms);
+            await using var ms = new MemoryStream();
+            await model.File.CopyToAsync(ms, cancellationToken);
+            var imageBytes = ms.ToArray();
 
-            Photo photo = new()
+            await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+            try
             {
-                Title = model.Title,
-                Description = model.Description,
-                Location = model.Location,
-                OwnerId = user?.Id ?? "",
-                ImageData = ms.ToArray(),
-                Tagging = model.Tags,
-                UploadedDate = DateTime.Now
-            };
-            context.Photos.Add(photo);
-            await context.SaveChangesAsync();
-                
-            // Handle tags (comma-separated)
-            if (!string.IsNullOrWhiteSpace(model.Tags))
-            {
-                string[] tagNames = model.Tags.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-                List<PhotoTag> photoTagMappings = [];
-                foreach (var name in tagNames)
+                var photo = new Photo
                 {
-                    Tag tag = await context.Tags.FirstOrDefaultAsync(t => t.Name == name)
-                              ?? (await context.Tags.AddAsync(new Tag { Name = name })).Entity;
+                    Title = model.Title?.Trim(),
+                    Description = model.Description?.Trim(),
+                    Location = model.Location?.Trim(),
+                    OwnerId = user?.Id ?? string.Empty,
+                    ImageData = imageBytes,
+                    Tagging = model.Tags?.Trim(),
+                    UploadedDate = DateTime.Now
+                };
 
-                    photoTagMappings.Add(new PhotoTag { PhotoId = photo.Id, TagId = tag.Id });
+                await context.Photos.AddAsync(photo, cancellationToken);
+                await context.SaveChangesAsync(cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(model.Tags))
+                {
+                    var tagNames = model.Tags
+                        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+
+                    // Get all existing tags
+                    var existingTags = await context.Tags
+                        .Where(t => tagNames.Contains(t.Name))
+                        .ToListAsync(cancellationToken);
+
+                    var newTagNames = tagNames
+                        .Except(existingTags.Select(t => t.Name), StringComparer.OrdinalIgnoreCase)
+                        .ToArray();
+
+                    if (newTagNames.Length > 0)
+                    {
+                        var newTags = newTagNames.Select(name => new Tag { Name = name }).ToList();
+                        await context.Tags.AddRangeAsync(newTags, cancellationToken);
+                        await context.SaveChangesAsync(cancellationToken);
+                        existingTags.AddRange(newTags);
+                    }
+
+                    // Add mapping PhotoTags
+                    var photoTags = existingTags.Select(t => new PhotoTag
+                    {
+                        PhotoId = photo.Id,
+                        TagId = t.Id
+                    });
+
+                    await context.PhotoTags.AddRangeAsync(photoTags, cancellationToken);
+                    await context.SaveChangesAsync(cancellationToken);
                 }
-                context.PhotoTags.AddRange(photoTagMappings);
-                await context.SaveChangesAsync();
-            }
 
-            return ResponseHelper.OK_Result(photo.Id, new DefaultResponseMessageModel("Successfull Upload","Fail To Upload"));
+                // Commit all if successful
+                await transaction.CommitAsync(cancellationToken);
+
+                return ResponseHelper.OK_Result(photo.Id,
+                    new DefaultResponseMessageModel("Successfully uploaded photo.", "အောင်မြင်စွာတင်ခဲ့ပါသည်။"));
+            }
+            catch (Exception ex)
+            {
+                //  Rollback everything if any failure have
+                await transaction.RollbackAsync(cancellationToken);
+
+                return ResponseHelper.InternalServerError_Request(null, new DefaultResponseMessageModel($"Upload failed: {ex.Message}",""));
+            }
         }
 
         [Authorize]
@@ -164,7 +206,7 @@ namespace PhotoGallery.Controllers.Gallery
         private static string GetImageMimeType(byte[] bytes)
         {
             if (bytes == null || bytes.Length < 4)
-                return "image/jpeg"; 
+                return "image/jpeg";
 
             // JPEG
             if (bytes[0] == 0xFF && bytes[1] == 0xD8)
