@@ -3,6 +3,7 @@
 @using Microsoft.AspNetCore.Authorization
 
 @{
+    Layout = null;
     ViewData["Title"] = "Upload Photo";
 }
 
@@ -12,6 +13,11 @@
     <meta charset="utf-8" />
     <title>@ViewData["Title"]</title>
 
+    <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/PhotoGallery.styles.css" asp-append-version="true" />
+    <link rel="stylesheet" href="~/select2/css/select2.min.css" />
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 
     <style>
         .upload-card {
@@ -24,7 +30,7 @@
 
         .preview-img {
             max-width: 100%;
-            max-height: 300px;
+            max-height: 250px;
             margin-top: 1rem;
             border-radius: 0.5rem;
             object-fit: cover;
@@ -59,7 +65,8 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Select Photo</label>
-                    <input type="file" id="uploadFile" class="form-control" accept="image/*" onchange="previewImage(event)" />
+                    <!-- restrict accepted types in the input and validate in JS as well -->
+                    <input type="file" id="uploadFile" class="form-control" accept="image/png, image/jpeg" onchange="previewImage(event)" />
                     <img id="preview" class="preview-img d-none" />
                 </div>
                 <div class="text-center">
@@ -71,19 +78,18 @@
         </div>
     </div>
 
+    <script src="~/lib/jquery/dist/jquery.min.js"></script>
+    <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="~/select2/js/select2.min.js"></script>
+    <script src="~/js/site.js" asp-append-version="true"></script>
 
-</body>
-</html>
-@section Scripts {
     <script>
-        // Ensure jQuery is present (this section renders after _Layout scripts)
         if (typeof window.jQuery === 'undefined') {
-            console.error('jQuery is not loaded. Ensure ~/lib/jquery/dist/jquery.min.js is present in _Layout.cshtml.');
+            console.error('jQuery is not loaded. Ensure ~/lib/jquery/dist/jquery.min.js exists under wwwroot.');
         } else {
             (function ($) {
-                // Ensure Select2 is present
                 if (!$.fn.select2) {
-                    console.error('Select2 is not loaded. Ensure ~/select2/js/select2.min.js exists and path in _Layout.cshtml is correct.');
+                    console.error('Select2 is not loaded. Ensure ~/select2/js/select2.min.js exists under wwwroot.');
                 } else {
                     $('#tagSelect').select2({
                         placeholder: "Select or type tags",
@@ -101,15 +107,38 @@
                     });
                 }
 
+                const ALLOWED_TYPES = ['image/png', 'image/jpeg'];
+                const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+                function validateFile(file) {
+                    if (!file) return { ok: false, message: 'No file selected.' };
+
+                    if (!ALLOWED_TYPES.includes(file.type)) {
+                        return { ok: false, message: 'Invalid file type. Only PNG and JPEG images are allowed.' };
+                    }
+
+                    if (file.size > MAX_FILE_SIZE) {
+                        return { ok: false, message: 'File is too large. Maximum allowed size is 5 MB.' };
+                    }
+
+                    return { ok: true };
+                }
+
                 // Handle form submit
                 $('#uploadForm').on('submit', function (e) {
                     e.preventDefault();
 
-                    const fileInput = $('#uploadFile')[0].files[0];
-                    if (!fileInput) { alert('Please select a photo.'); return; }
+                    const file = $('#uploadFile')[0].files[0];
+                    if (!file) { alert('Please select a photo.'); return; }
+
+                    const validation = validateFile(file);
+                    if (!validation.ok) {
+                        alert(validation.message);
+                        return;
+                    }
 
                     const formData = new FormData();
-                    formData.append('File', fileInput);
+                    formData.append('File', file);
                     formData.append('Title', $('#photoTitle').val());
                     formData.append('Description', $('#photoDescription').val());
                     formData.append('Location', $('#photoLocation').val());
@@ -122,7 +151,6 @@
                         processData: false,
                         contentType: false,
                         success: function (response) {
-                            alert('Photo uploaded successfully!');
                             window.location.href = '/Photos/List';
                         },
                         error: function (xhr) {
@@ -135,16 +163,33 @@
                 window.previewImage = function (event) {
                     const input = event.target;
                     const preview = document.getElementById('preview');
-                    if (input.files && input.files[0]) {
-                        const reader = new FileReader();
-                        reader.onload = function (e) {
-                            preview.src = e.target.result;
-                            preview.classList.remove('d-none');
-                        };
-                        reader.readAsDataURL(input.files[0]);
+                    const file = input.files && input.files[0];
+
+                    if (!file) {
+                        preview.classList.add('d-none');
+                        preview.src = '';
+                        return;
                     }
+
+                    const validation = validateFile(file);
+                    if (!validation.ok) {
+                        alert(validation.message);
+                        // clear the invalid file selection
+                        input.value = '';
+                        preview.classList.add('d-none');
+                        preview.src = '';
+                        return;
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = function (e) {
+                        preview.src = e.target.result;
+                        preview.classList.remove('d-none');
+                    };
+                    reader.readAsDataURL(file);
                 };
             })(jQuery);
         }
     </script>
-}
+</body>
+</html>

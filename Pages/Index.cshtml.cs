@@ -29,18 +29,20 @@ namespace PhotoGallery.Pages
             public string Password { get; set; } = string.Empty;
         }
 
-        public async Task<IActionResult> OnGetAsync(string returnUrl = "")
+        public async Task<IActionResult> OnGetAsync(string returnUrl = null)
         {
-            returnUrl = string.IsNullOrEmpty(returnUrl) ? Url.Content("~/") : returnUrl;
+            ReturnUrl = string.IsNullOrEmpty(returnUrl) ? Url.Content("~/") : returnUrl;
 
-            // Clear the existing external cookie to ensure a clean login process
             await HttpContext.SignOutAsync(IdentityConstants.ExternalScheme);
 
             ExternalLogins = (await signInManager.GetExternalAuthenticationSchemesAsync()).ToList();
 
-            ReturnUrl = returnUrl;
+            if (User?.Identity?.IsAuthenticated == true)
+            {
+                return RedirectToPage("/Photos/List");
+            }
 
-            return User?.Identity?.IsAuthenticated == true ? RedirectToPage("./Photos/List") : Page();
+            return Page();
         }
 
         public async Task<IActionResult> OnPostAsync()

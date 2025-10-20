@@ -11,52 +11,114 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <style>
+
+        .card-img-top {
+            width: 100%;
+            height: 180px;
+            object-fit: cover;
+            border-top-left-radius: 0.375rem;
+            border-top-right-radius: 0.375rem;
+            background-color: #f8f9fa;
+        }
+
+        .card {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+        }
+
+
         .scroll-y-container {
-            max-height: 70vh;
+            max-height:60vh;
             overflow-y: auto;
+            padding-top: 0.5rem;
             padding-right: 0.5rem;
         }
 
-            .scroll-y-container::-webkit-scrollbar {
-                width: 0;
-                background: transparent;
-            }
+        .scroll-y-container::-webkit-scrollbar {
+            width: 0;
+            background: transparent;
+        }
 
         .scroll-y-container {
             scrollbar-width: none;
             scroll-behavior: smooth;
         }
+
+        .end-of-list {
+            color: #6c757d;
+            padding: 1rem 0;
+        }
     </style>
 </head>
 <body>
     <div class="container py-4">
-        <h2 class="mb-4 text-center">📷 Photo List</h2>
+        <h2 class="mb-4 text-center">PhotoGallery</h2>
         <div class="text-end mb-3">
             <a href="/Photos/Upload" class="btn btn-success">
                 <i class="fas fa-upload me-1"></i> Upload Photo
             </a>
         </div>
 
-        <div class="scroll-y-container">
+        <div class="scroll-y-container" id="scrollContainer">
             <div class="row" id="photoList">
-                <!-- Photos will be injected here -->
+                <!-- Photos will be placed here -->
             </div>
-        </div>
 
-        <div class="mt-3 text-center">
-            <button id="loadMoreBtn" class="btn btn-primary">Load More</button>
+            <!-- sentinel to help with layout / end message -->
+            <div id="listStatus" class="text-center w-100"></div>
         </div>
     </div>
 
     <script>
         let skipRows = 0;
         const pageSize = 10;
+        let isLoading = false;
+        let noMoreData = false;
+        const thresholdPx = 250; // when within this many px from bottom, load more
+
+        function appendPhotos(records) {
+            records.forEach(photo => {
+                const photoHtml = `
+                    <div class="col-md-3 mb-4">
+                        <div class="card shadow-sm">
+                            <img src="${photo.thumbnail}" class="card-img-top img-fluid" alt="${photo.title}" />
+                            <div class="card-body">
+                                <h6 class="card-title">${photo.title}</h6>
+                                <div class="d-flex gap-2 mt-3">
+                                    <a href="/Photos/Detail/${photo.id}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-info-circle me-1"></i> Detail
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePhoto(${photo.id}, this)">
+                                        <i class="fas fa-trash-alt me-1"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+                $('#photoList').append(photoHtml);
+            });
+        }
+
+        function setStatusMessage(messageHtml) {
+            $('#listStatus').html(messageHtml);
+        }
 
         function loadPhotos(reset = false) {
+            if (isLoading || noMoreData) return;
+
             if (reset) {
                 skipRows = 0;
                 $('#photoList').empty();
+                noMoreData = false;
+                setStatusMessage('');
             }
+
+            isLoading = true;
+            setStatusMessage('<div class="py-2"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading...</div>');
 
             $.ajax({
                 url: `/api/Photos`,
@@ -66,44 +128,31 @@
                     pageSize: pageSize
                 },
                 success: function (response) {
-                    const records = response.data.records;
-                    const total = response.data.recordsTotal;
+                    const records = response.data.records || [];
+                    const total = response.data.recordsTotal || 0;
 
-                    if (records.length === 0) {
-                        $('#loadMoreBtn').hide();
-                        return;
+                    if (records.length > 0) {
+                        appendPhotos(records);
+                        skipRows += records.length;
                     }
 
-                    records.forEach(photo => {
-                        const photoHtml = `
-                            <div class="col-md-3 mb-4">
-                                <div class="card shadow-sm">
-                                    <img src="${photo.thumbnail}" class="card-img-top img-fluid" alt="${photo.title}" />
-                                    <div class="card-body">
-                                        <h6 class="card-title">${photo.title}</h6>
-                                        <div class="d-flex gap-2 mt-3">
-                                            <a href="/Photos/Detail/${photo.id}" class="btn btn-sm btn-outline-primary">
-                                                <i class="fas fa-info-circle me-1"></i> Detail
-                                            </a>
-                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePhoto(${photo.id}, this)">
-                                                <i class="fas fa-trash-alt me-1"></i> Delete
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>`;
-                        $('#photoList').append(photoHtml);
-                    });
-
-                    skipRows += records.length;
-
-                    // Hide Load More if all records loaded
-                    if (skipRows >= total) {
-                        $('#loadMoreBtn').hide();
+                    // If no records returned or we've loaded all records, stop further requests
+                    if (records.length === 0 || skipRows >= total) {
+                        noMoreData = true;
+                        if (skipRows === 0) {
+                            setStatusMessage('<div class="end-of-list">No photos available.</div>');
+                        } else {
+                            setStatusMessage('<div class="end-of-list">End of photos.</div>');
+                        }
+                    } else {
+                        setStatusMessage(''); // clear status so sentinel is invisible
                     }
                 },
                 error: function (xhr) {
-                    alert("Failed to load photos: " + xhr.statusText);
+                    setStatusMessage('<div class="end-of-list text-danger">Failed to load photos.</div>');
+                },
+                complete: function () {
+                    isLoading = false;
                 }
             });
         }
@@ -116,6 +165,8 @@
                 type: 'DELETE',
                 success: function () {
                     $(button).closest('.col-md-3').remove();
+                    // Optional: adjust skipRows so further loads still work correctly
+                     skipRows = Math.max(0, skipRows - 1);
                     alert('Photo deleted successfully.');
                 },
                 error: function (xhr) {
@@ -125,8 +176,35 @@
         }
 
         $(document).ready(function () {
-            loadPhotos(); 
-            $('#loadMoreBtn').click(() => loadPhotos());
+            const $container = $('#scrollContainer');
+
+            // initial load
+            loadPhotos();
+
+            // debounce scroll handler
+            let scrollTimer = null;
+            $container.on('scroll', function () {
+                if (scrollTimer) clearTimeout(scrollTimer);
+                scrollTimer = setTimeout(function () {
+                    if (noMoreData || isLoading) return;
+
+                    const container = $container[0];
+                    const scrolledFromTop = container.scrollTop;
+                    const visibleHeight = container.clientHeight;
+                    const totalHeight = container.scrollHeight;
+
+                    if (scrolledFromTop + visibleHeight >= totalHeight - thresholdPx) {
+                        loadPhotos();
+                    }
+                }, 120);
+            });
+
+            // Optional: keyboard navigation to trigger more load when focusing and pressing PageDown
+            $container.on('keydown', function (e) {
+                if (e.key === 'PageDown') {
+                    loadPhotos();
+                }
+            });
         });
     </script>
 </body>

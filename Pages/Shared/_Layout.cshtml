@@ -4,41 +4,120 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>@ViewData["Title"] - PhotoGallery</title>
-    <script type="importmap"></script>
+
+    <!-- Core Styles -->
     <link rel="stylesheet" href="~/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="~/css/site.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/PhotoGallery.styles.css" asp-append-version="true" />
     <link rel="stylesheet" href="~/select2/css/select2.min.css" />
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+    <!-- Custom Styling -->
+    <style>
+        body {
+            background-color: #f4f5f7;
+            font-family: 'Segoe UI', sans-serif;
+            color: #333;
+        }
+
+        header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e0e0e0;
+            padding: 1rem 0;
+        }
+
+        .navbar-brand {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #333 !important;
+        }
+
+        .nav-link {
+            color: #555 !important;
+            margin-right: 1rem;
+        }
+
+            .nav-link.btn-link {
+                color: #007bff !important;
+            }
+
+        .auth-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            background-color: #28a745;
+            border-radius: 50%;
+            margin-left: 0.5rem;
+        }
+
+        .container-main {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 2rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            margin-top: 2rem;
+        }
+
+        footer {
+            background-color: #ffffff;
+            border-top: 1px solid #e0e0e0;
+            padding: 1.5rem 0;
+            margin-top: 3rem;
+            font-size: 0.9rem;
+            color: #777;
+        }
+
+            footer a {
+                color: #007bff;
+                text-decoration: none;
+            }
+
+                footer a:hover {
+                    text-decoration: underline;
+                }
+    </style>
 </head>
 <body>
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
-            <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">PhotoGallery</a>
-                <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
-                        aria-expanded="false" aria-label="Toggle navigation">
-                    <span class="navbar-toggler-icon"></span>
-                </button>
-                <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
-                    <ul class="navbar-nav flex-grow-1">
-                    </ul>
-                </div>
+        <nav class="navbar navbar-expand-lg container">
+            <a class="navbar-brand" asp-area="" asp-page="/Index">PhotoGallery</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav"
+                    aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse justify-content-end" id="mainNav">
+                <ul class="navbar-nav">
+                    @if (User?.Identity?.IsAuthenticated ?? false)
+                    {
+                        <li class="nav-item">
+                            <span class="nav-link">
+                                Hello, @User.Identity.Name <span class="auth-indicator" title="Authorized"></span>
+                            </span>
+                        </li>
+                        <li class="nav-item">
+                            <form asp-page="/Logout" method="post" class="d-inline">
+                                <button type="submit" class="nav-link btn btn-link">Log out</button>
+                            </form>
+                        </li>
+                    }
+                    else
+                    {
+                        <li class="nav-item">
+                            <a class="nav-link" asp-page="/Index">Log in</a>
+                        </li>
+                    }
+                </ul>
             </div>
         </nav>
     </header>
-    <div class="container">
+
+    <div class="container container-main">
         <main role="main" class="pb-3">
             @RenderBody()
         </main>
     </div>
-
-    <footer class="border-top footer text-muted">
-        <div class="container">
-            &copy; 2025 - PhotoGallery - <a asp-area="" asp-page="/Privacy">Privacy</a>
-        </div>
-    </footer>
-
+    <!-- Scripts -->
     <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/select2/js/select2.min.js"></script>
