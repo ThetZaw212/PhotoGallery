@@ -4,7 +4,7 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddRazorPages(options =>
 {
     options.Conventions.AuthorizeFolder("/Photos");
-    options.Conventions.AllowAnonymousToPage("/Login");
+    options.Conventions.AllowAnonymousToPage("/Index");
 });
 
 //Db + Identity (Cookie auth)

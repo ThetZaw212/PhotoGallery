@@ -30,7 +30,7 @@
 
             services.ConfigureApplicationCookie(options =>  
             {
-                options.LoginPath = "/";
+                options.LoginPath = "/Index";
                 options.AccessDeniedPath = "/AccessDenied";
                 options.ExpireTimeSpan = TimeSpan.FromMinutes(60);
                 options.SlidingExpiration = true;
