@@ -88,7 +88,6 @@
             },new DefaultResponseMessageModel("Successfully Get Data.", "အောင်မြင်ပါသည်။"));
         }
 
-        [Authorize]
         [HttpPost("upload")]
         [EndpointSummary("Photo Upload")]
         public async Task<IActionResult> UploadPhoto([FromForm] UploadPhotoModel model)

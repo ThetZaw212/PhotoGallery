@@ -5,9 +5,9 @@ namespace PhotoGallery.Pages.Photos
     [Authorize]
     public class UploadModel() : PageModel
     {
-        public async Task<IActionResult> OnPostAsync()
+
+        public void OnGet()
         {
-            
         }
     }
 }

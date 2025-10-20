@@ -1,7 +1,6 @@
 ﻿@page
 @model PhotoGallery.Pages.Photos.UploadModel
 @using Microsoft.AspNetCore.Authorization
-@attribute [Authorize]
 
 @{
     ViewData["Title"] = "Upload Photo";
@@ -10,8 +9,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+
+
     <style>
         .upload-card {
             max-width: 600px;
@@ -39,26 +40,26 @@
         <div class="upload-card bg-white">
             <h3 class="text-center mb-4">📤 Upload a New Photo</h3>
 
-            <form method="post" enctype="multipart/form-data">
+            <form id="uploadForm">
                 <div class="mb-3">
                     <label class="form-label">Title</label>
-                    <input asp-for="Photo.Title" class="form-control" />
+                    <input id="photoTitle" class="form-control" />
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Description</label>
-                    <textarea asp-for="Photo.Description" class="form-control" rows="3"></textarea>
+                    <textarea id="photoDescription" class="form-control" rows="3"></textarea>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Location</label>
-                    <input asp-for="Photo.Location" class="form-control" />
+                    <input id="photoLocation" class="form-control" />
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Tags</label>
-                    <select id="tagSelect" name="Photo.Tags" class="form-control" multiple="multiple"></select>
+                    <select id="tagSelect" class="form-control" multiple="multiple"></select>
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Select Photo</label>
-                    <input type="file" asp-for="UploadFile" class="form-control" accept="image/*" onchange="previewImage(event)" />
+                    <input type="file" id="uploadFile" class="form-control" accept="image/*" onchange="previewImage(event)" />
                     <img id="preview" class="preview-img d-none" />
                 </div>
                 <div class="text-center">
@@ -70,41 +71,80 @@
         </div>
     </div>
 
-  
-    
-    <script>
-        $(document).ready(function () {
-            $('#tagSelect').select2({
-                placeholder: "Select or type tags",
-                tags: true,
-                ajax: {
-                    url: '/api/photos/tag',
-                    dataType: 'json',
-                    processResults: function (data) {
-                        const tags = data.data || [];
-                        return {
-                            results: tags.map(tag => ({
-                                id: tag.name,
-                                text: tag.name
-                            }))
-                        };
-                    }
-                }
-            });
-        });
 
-        function previewImage(event) {
-            const input = event.target;
-            const preview = document.getElementById('preview');
-            if (input.files && input.files[0]) {
-                const reader = new FileReader();
-                reader.onload = function (e) {
-                    preview.src = e.target.result;
-                    preview.classList.remove('d-none');
-                };
-                reader.readAsDataURL(input.files[0]);
-            }
-        }
-    </script>
 </body>
 </html>
+@section Scripts {
+    <script>
+        // Ensure jQuery is present (this section renders after _Layout scripts)
+        if (typeof window.jQuery === 'undefined') {
+            console.error('jQuery is not loaded. Ensure ~/lib/jquery/dist/jquery.min.js is present in _Layout.cshtml.');
+        } else {
+            (function ($) {
+                // Ensure Select2 is present
+                if (!$.fn.select2) {
+                    console.error('Select2 is not loaded. Ensure ~/select2/js/select2.min.js exists and path in _Layout.cshtml is correct.');
+                } else {
+                    $('#tagSelect').select2({
+                        placeholder: "Select or type tags",
+                        tags: true,
+                        ajax: {
+                            url: '/api/photos/tag',
+                            dataType: 'json',
+                            processResults: function (data) {
+                                const tags = data.data || [];
+                                return {
+                                    results: tags.map(tag => ({ id: tag.name, text: tag.name }))
+                                };
+                            }
+                        }
+                    });
+                }
+
+                // Handle form submit
+                $('#uploadForm').on('submit', function (e) {
+                    e.preventDefault();
+
+                    const fileInput = $('#uploadFile')[0].files[0];
+                    if (!fileInput) { alert('Please select a photo.'); return; }
+
+                    const formData = new FormData();
+                    formData.append('File', fileInput);
+                    formData.append('Title', $('#photoTitle').val());
+                    formData.append('Description', $('#photoDescription').val());
+                    formData.append('Location', $('#photoLocation').val());
+                    formData.append('Tags', $('#tagSelect').val()?.join(',') || '');
+
+                    $.ajax({
+                        url: '/api/photos/upload',
+                        type: 'POST',
+                        data: formData,
+                        processData: false,
+                        contentType: false,
+                        success: function (response) {
+                            alert('Photo uploaded successfully!');
+                            window.location.href = '/Photos/List';
+                        },
+                        error: function (xhr) {
+                            alert('Failed to upload photo: ' + xhr.responseText);
+                        }
+                    });
+                });
+
+                // Preview image before upload
+                window.previewImage = function (event) {
+                    const input = event.target;
+                    const preview = document.getElementById('preview');
+                    if (input.files && input.files[0]) {
+                        const reader = new FileReader();
+                        reader.onload = function (e) {
+                            preview.src = e.target.result;
+                            preview.classList.remove('d-none');
+                        };
+                        reader.readAsDataURL(input.files[0]);
+                    }
+                };
+            })(jQuery);
+        }
+    </script>
+}
