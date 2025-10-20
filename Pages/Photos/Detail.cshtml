@@ -1,0 +1,157 @@
+﻿@page "{id:int}"
+@model PhotoGallery.Pages.Photos.DetailModel
+@{
+    ViewData["Title"] = "Photo Detail";
+}
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>@ViewData["Title"]</title>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .photo-detail-container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: #fff;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+        }
+
+        .photo-header {
+            position: relative;
+        }
+
+            .photo-header img {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+
+        .photo-overlay {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(to top, rgba(0,0,0,0.7), transparent);
+            color: white;
+            padding: 1rem;
+        }
+
+            .photo-overlay h2 {
+                font-size: 1.8rem;
+                margin: 0;
+            }
+
+        .photo-body {
+            padding: 2rem;
+        }
+
+        .tags span {
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 0.3rem 0.8rem;
+            border-radius: 20px;
+            margin-right: 6px;
+            font-size: 0.9rem;
+        }
+
+        .action-buttons {
+            margin-top: 1.5rem;
+        }
+
+            .action-buttons a, .action-buttons button {
+                border-radius: 30px;
+                padding: 0.5rem 1.5rem;
+            }
+    </style>
+</head>
+<body>
+    <div class="photo-detail-container">
+        <div class="photo-header">
+            <img src="" alt="Photo" />
+            <div class="photo-overlay">
+                <h2></h2>
+                <p class="mb-0"><i class="fa-regular fa-calendar me-1"></i> Uploaded on </p>
+            </div>
+        </div>
+
+        <div class="photo-body">
+            <p class="lead"></p>
+            <div class="tags mb-3"></div>
+            <div class="action-buttons d-flex justify-content-between">
+                <a href="/Photos/List" class="btn btn-outline-secondary">
+                    <i class="fa-solid fa-arrow-left me-1"></i> Back to Gallery
+                </a>
+                <button class="btn btn-danger">
+                    <i class="fa-solid fa-trash-alt me-1"></i> Delete Photo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            // Get the photo Id from URL
+            const photoId = window.location.pathname.split('/').pop();
+
+            function loadPhotoDetail(id) {
+                $.ajax({
+                    url: `/api/Photos/${id}`,
+                    type: 'GET',
+                    success: function (response) {
+                        const photo = response.data.photo;
+
+                        $('.photo-header img').attr('src', photo.Thumbnail).attr('alt', photo.Title);
+
+                        // Overlay title & date
+                        $('.photo-overlay h2').text(photo.Title);
+                        $('.photo-overlay p').html(`<i class="fa-regular fa-calendar me-1"></i> Uploaded on ${photo.UploadedDate}`);
+
+                        // Description
+                        $('.photo-body .lead').html(`A beautiful shot of <strong>${photo.Title}</strong>, part of your photo collection.`);
+
+                        // Tags
+                        const tagContainer = $('.photo-body .tags');
+                        tagContainer.empty();
+                        if (photo.Tags && photo.Tags.length > 0) {
+                            photo.Tags.forEach(tag => tagContainer.append(`<span>#${tag}</span>`));
+                        }
+
+                        // Delete Function
+                        $('.action-buttons .btn-danger').off('click').on('click', function () {
+                            if (!confirm('Are you sure you want to delete this photo?')) return;
+
+                            $.ajax({
+                                url: `/api/Photos/${photo.Id}`,
+                                type: 'DELETE',
+                                success: function () {
+                                    alert('Photo deleted successfully.');
+                                    window.location.href = '/Photos/List';
+                                },
+                                error: function (xhr) {
+                                    alert('Failed to delete photo: ' + xhr.statusText);
+                                }
+                            });
+                        });
+                    },
+                    error: function (xhr) {
+                        alert('Failed to load photo details: ' + xhr.statusText);
+                    }
+                });
+            }
+
+            loadPhotoDetail(photoId);
+        });
+    </script>
+</body>
+</html>
