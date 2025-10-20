@@ -25,23 +25,24 @@
             transition: transform 0.2s ease, box-shadow 0.2s ease;
         }
 
-        .card:hover {
-            transform: scale(1.03);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
-        }
+            .card:hover {
+                transform: scale(1.03);
+                box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
+            }
 
 
         .scroll-y-container {
-            max-height:60vh;
+            max-height: 60vh;
             overflow-y: auto;
             padding-top: 0.5rem;
             padding-right: 0.5rem;
+            position: relative;
         }
 
-        .scroll-y-container::-webkit-scrollbar {
-            width: 0;
-            background: transparent;
-        }
+            .scroll-y-container::-webkit-scrollbar {
+                width: 0;
+                background: transparent;
+            }
 
         .scroll-y-container {
             scrollbar-width: none;
@@ -52,9 +53,64 @@
             color: #6c757d;
             padding: 1rem 0;
         }
+
+        @@keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fade-in {
+            animation: fadeInUp 400ms ease both;
+        }
+
+        .skeleton-card {
+            border-radius: .375rem;
+            background: linear-gradient(90deg, #f6f7f8 25%, #edeef1 37%, #f6f7f8 63%);
+            background-size: 400% 100%;
+            animation: shimmer 1.2s linear infinite;
+            height: 280px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+        }
+
+        .skeleton-img {
+            height: 180px;
+            border-top-left-radius: .375rem;
+            border-top-right-radius: .375rem;
+            background-color: #e9ecef;
+        }
+
+        .skeleton-line {
+            height: 12px;
+            margin: 10px;
+            border-radius: 6px;
+            background-color: rgba(0,0,0,0.06);
+            width: 80%;
+        }
+
+        @@keyframes shimmer {
+            0% {
+                background-position: 200% 0;
+            }
+
+            100% {
+                background-position: -200% 0;
+            }
+        }
+
+
     </style>
 </head>
 <body>
+    @await Html.PartialAsync("~/Pages/Shared/_GlobalPopup.cshtml")
     <div class="container py-4">
         <h2 class="mb-4 text-center">PhotoGallery</h2>
         <div class="text-end mb-3">
@@ -63,13 +119,19 @@
             </a>
         </div>
 
-        <div class="scroll-y-container" id="scrollContainer">
+        <div class="scroll-y-container" id="scrollContainer" aria-busy="false">
             <div class="row" id="photoList">
                 <!-- Photos will be placed here -->
             </div>
 
             <!-- sentinel to help with layout / end message -->
             <div id="listStatus" class="text-center w-100"></div>
+
+            <!-- inline overlay loader shown while paging -->
+            @* <div id="loadingOverlay" class="loading-overlay" style="display:none;">
+                <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+                <div class="small">Loading more...</div>
+            </div> *@
         </div>
     </div>
 
@@ -83,7 +145,7 @@
         function appendPhotos(records) {
             records.forEach(photo => {
                 const photoHtml = `
-                    <div class="col-md-3 mb-4">
+                    <div class="col-md-3 mb-4 fade-in">
                         <div class="card shadow-sm">
                             <img src="${photo.thumbnail}" class="card-img-top img-fluid" alt="${photo.title}" />
                             <div class="card-body">
@@ -107,6 +169,34 @@
             $('#listStatus').html(messageHtml);
         }
 
+        function showLoadingOverlay(show) {
+            $('#loadingOverlay').toggle(show);
+            $('#scrollContainer').attr('aria-busy', show ? 'true' : 'false');
+        }
+
+        function showLoadingSkeletons(count) {
+            // Add skeleton cards to indicate loading
+            const $list = $('#photoList');
+            // Avoid stacking skeletons if already present
+            if ($list.find('.skeleton-wrapper').length > 0) return;
+
+            for (let i = 0; i < count; i++) {
+                const skeleton = `
+                    <div class="col-md-3 mb-4 skeleton-wrapper">
+                        <div class="skeleton-card">
+                            <div class="skeleton-img"></div>
+                            <div class="skeleton-line" style="width:60%;"></div>
+                            <div class="skeleton-line" style="width:40%; height:10px;"></div>
+                        </div>
+                    </div>`;
+                $list.append(skeleton);
+            }
+        }
+
+        function removeSkeletons() {
+            $('#photoList').find('.skeleton-wrapper').remove();
+        }
+
         function loadPhotos(reset = false) {
             if (isLoading || noMoreData) return;
 
@@ -118,7 +208,11 @@
             }
 
             isLoading = true;
-            setStatusMessage('<div class="py-2"><div class="spinner-border spinner-border-sm text-primary" role="status"></div> Loading...</div>');
+            // show skeletons 
+            showLoadingOverlay(true);
+            setStatusMessage('<div class="py-2 visually-hidden">Loading...</div>'); // keep accessible message for screen readers
+            const skeletonCount = Math.min(pageSize, 8);
+            showLoadingSkeletons(skeletonCount);
 
             $.ajax({
                 url: `/api/Photos`,
@@ -131,12 +225,14 @@
                     const records = response.data.records || [];
                     const total = response.data.recordsTotal || 0;
 
+                    // remove skeletons 
+                    removeSkeletons();
+
                     if (records.length > 0) {
                         appendPhotos(records);
                         skipRows += records.length;
                     }
 
-                    // If no records returned or we've loaded all records, stop further requests
                     if (records.length === 0 || skipRows >= total) {
                         noMoreData = true;
                         if (skipRows === 0) {
@@ -149,29 +245,33 @@
                     }
                 },
                 error: function (xhr) {
+                    removeSkeletons();
                     setStatusMessage('<div class="end-of-list text-danger">Failed to load photos.</div>');
                 },
                 complete: function () {
                     isLoading = false;
+                    showLoadingOverlay(false);
                 }
             });
         }
 
         function deletePhoto(id, button) {
-            if (!confirm('Are you sure you want to delete this photo?')) return;
+            showGlobalPopup('Confirm delete', 'Are you sure you want to delete this photo?', 'info', 0, true, function (confirmed) {
+                if (!confirmed) return;
 
-            $.ajax({
-                url: `/api/Photos/${id}`,
-                type: 'DELETE',
-                success: function () {
-                    $(button).closest('.col-md-3').remove();
-                    // Optional: adjust skipRows so further loads still work correctly
-                     skipRows = Math.max(0, skipRows - 1);
-                    alert('Photo deleted successfully.');
-                },
-                error: function (xhr) {
-                    alert('Failed to delete photo: ' + xhr.statusText);
-                }
+                $.ajax({
+                    url: `/api/Photos/${id}`,
+                    type: 'DELETE',
+                    success: function () {
+                        $(button).closest('.col-md-3').remove();
+                        skipRows = Math.max(0, skipRows - 1);
+                        showGlobalPopup('Deleted', 'Photo deleted successfully.', 'success', 2000);
+                    },
+                    error: function (xhr) {
+                        var msg = xhr && xhr.responseText ? xhr.responseText : 'Failed to delete photo';
+                        showGlobalPopup('Delete failed', msg, 'error', 4000);
+                    }
+                });
             });
         }
 
@@ -199,7 +299,7 @@
                 }, 120);
             });
 
-            // Optional: keyboard navigation to trigger more load when focusing and pressing PageDown
+            // keyboard navigation to trigger more load when focusing and pressing PageDown
             $container.on('keydown', function (e) {
                 if (e.key === 'PageDown') {
                     loadPhotos();

@@ -42,6 +42,7 @@
     </style>
 </head>
 <body>
+    @await Html.PartialAsync("~/Pages/Shared/_GlobalPopup.cshtml")
     <div class="container py-5">
         <div class="upload-card bg-white">
             <h3 class="text-center mb-4">📤 Upload a New Photo</h3>
@@ -65,7 +66,6 @@
                 </div>
                 <div class="mb-3">
                     <label class="form-label">Select Photo</label>
-                    <!-- restrict accepted types in the input and validate in JS as well -->
                     <input type="file" id="uploadFile" class="form-control" accept="image/png, image/jpeg" onchange="previewImage(event)" />
                     <img id="preview" class="preview-img d-none" />
                 </div>
@@ -108,7 +108,7 @@
                 }
 
                 const ALLOWED_TYPES = ['image/png', 'image/jpeg'];
-                const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+                const MAX_FILE_SIZE = 5 * 1024 * 1024; // allow 5 MB
 
                 function validateFile(file) {
                     if (!file) return { ok: false, message: 'No file selected.' };
@@ -128,12 +128,22 @@
                 $('#uploadForm').on('submit', function (e) {
                     e.preventDefault();
 
+                    const title = $('#photoTitle').val().trim();
+                    const description = $('#photoDescription').val().trim();
+                    const location = $('#photoLocation').val().trim();
+                    const tags = $('#tagSelect').val();
                     const file = $('#uploadFile')[0].files[0];
-                    if (!file) { alert('Please select a photo.'); return; }
+
+                    // --- Validate all fields ---
+                    if (!title) { showGlobalPopup('Validation', 'Title is required.', 'error', 2000); return; }
+                    if (!description) { showGlobalPopup('Validation', 'Description is required.', 'error', 2000); return; }
+                    if (!location) { showGlobalPopup('Validation', 'Location is required.', 'error', 2000); return; }
+                    if (!tags || tags.length === 0) { showGlobalPopup('Validation', 'Please select at least one tag.', 'error', 4000); return; }
+                    if (!file) { showGlobalPopup('Validation', 'Please select a photo.', 'error', 2000); return; }
 
                     const validation = validateFile(file);
-                    if (!validation.ok) {
-                        alert(validation.message);
+                     if (!validation.ok) {
+                        showGlobalPopup('Invalid file', validation.message, 'error', 2000);
                         return;
                     }
 
@@ -151,10 +161,12 @@
                         processData: false,
                         contentType: false,
                         success: function (response) {
+                            showGlobalPopup('Success', 'Photo uploaded successfully.', 'success', 2000, );
                             window.location.href = '/Photos/List';
                         },
                         error: function (xhr) {
-                            alert('Failed to upload photo: ' + xhr.responseText);
+                            var msg = xhr && xhr.responseText ? xhr.responseText : 'Failed to upload photo';
+                            showGlobalPopup('Upload failed', msg, 'error', 4000);
                         }
                     });
                 });

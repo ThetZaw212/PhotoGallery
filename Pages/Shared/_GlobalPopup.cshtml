@@ -1,0 +1,230 @@
+﻿@* Global popup shared partial.
+   Usage in JS:
+     // simple message (auto-hide after 2s)
+     showGlobalPopup("Title", "Message", "success", 2000, callbackOrNothing);
+
+     // confirmation dialog (waits for user, callback receives boolean)
+     showGlobalPopup("Confirm", "Delete this item?", "info", 0, true, function(confirmed) {
+         if (confirmed) { ... } else { ... }
+     });
+*@
+
+<div id="globalPopup" class="global-popup d-none" role="alert" aria-live="polite" aria-atomic="true">
+    <div class="global-popup-inner" id="globalPopupInner">
+        <div class="global-popup-icon" id="globalPopupIcon"><i class="fas fa-circle-notch fa-spin"></i></div>
+        <div class="global-popup-content">
+            <div class="global-popup-header" id="globalPopupHeader">Header</div>
+            <div class="global-popup-text" id="globalPopupText">Message text</div>
+            <div class="global-popup-actions d-none" id="globalPopupActions">
+                <button type="button" class="btn btn-sm btn-secondary me-2" id="globalPopupCancel">Cancel</button>
+                <button type="button" class="btn btn-sm btn-danger" id="globalPopupConfirm">Confirm</button>
+            </div>
+        </div>
+        <button type="button" class="global-popup-close" id="globalPopupClose" aria-label="Close">&times;</button>
+    </div>
+</div>
+
+<style>
+    /* Keep styles local to the partial for easy drop-in */
+    .global-popup {
+        position: fixed;
+        top: 1.5rem;
+        left: 50%;
+        transform: translateX(-50%) translateY(-20px);
+        min-width: 320px;
+        max-width: 90%;
+        z-index: 1200;
+        transition: opacity 250ms ease, transform 250ms ease;
+        opacity: 0;
+        pointer-events: none;
+        font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+        .global-popup .global-popup-inner {
+            display: flex;
+            align-items: center;
+            background: #fff;
+            color: #222;
+            padding: .6rem .8rem;
+            border-radius: .5rem;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+            border-left: 4px solid #0d6efd;
+        }
+
+        .global-popup .global-popup-icon {
+            margin-right: .6rem;
+            font-size: 1.25rem;
+            width: 32px;
+            text-align: center;
+        }
+
+        .global-popup .global-popup-header {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .global-popup .global-popup-text {
+            font-size: .95rem;
+            opacity: .9;
+        }
+
+        .global-popup .global-popup-actions {
+            margin-top: .5rem;
+        }
+
+        .global-popup .global-popup-close {
+            background: transparent;
+            border: none;
+            color: #666;
+            font-size: 1.1rem;
+            margin-left: .6rem;
+            cursor: pointer;
+        }
+
+        /* Visible state */
+        .global-popup.visible {
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+            pointer-events: auto;
+        }
+
+        /* Type styles */
+        .global-popup[data-type="success"] .global-popup-inner {
+            border-left-color: #198754;
+        }
+
+        .global-popup[data-type="error"] .global-popup-inner {
+            border-left-color: #dc3545;
+        }
+
+        .global-popup[data-type="info"] .global-popup-inner {
+            border-left-color: #0d6efd;
+        }
+</style>
+
+<script>
+    (function () {
+        // Flexible signature:
+        // showGlobalPopup(header, text, type = 'info', duration = 2000, maybeIsConfirmOrCallback, maybeCallback)
+        window.showGlobalPopup = function (header, text, type, duration, arg5, arg6) {
+            try {
+                var container = document.getElementById('globalPopup');
+                if (!container) return;
+
+                type = type || 'info';
+                duration = typeof duration === 'number' ? duration : 2000;
+
+                // Resolve isConfirm and callback based on arg types to remain backwards-compatible
+                var isConfirm = false;
+                var callback = null;
+                if (typeof arg5 === 'boolean') {
+                    isConfirm = arg5;
+                    if (typeof arg6 === 'function') callback = arg6;
+                } else if (typeof arg5 === 'function') {
+                    callback = arg5;
+                }
+
+                var h = document.getElementById('globalPopupHeader');
+                var t = document.getElementById('globalPopupText');
+                var icon = document.getElementById('globalPopupIcon');
+                var actions = document.getElementById('globalPopupActions');
+                var confirmBtn = document.getElementById('globalPopupConfirm');
+                var cancelBtn = document.getElementById('globalPopupCancel');
+                var closeBtn = document.getElementById('globalPopupClose');
+
+                h.textContent = header || '';
+                t.textContent = text || '';
+                container.setAttribute('data-type', type);
+
+                // icon selection
+                var iconHtml = {
+                    success: '<i class="fas fa-check-circle" style="color:#198754"></i>',
+                    error: '<i class="fas fa-exclamation-circle" style="color:#dc3545"></i>',
+                    info: '<i class="fas fa-circle-info" style="color:#0d6efd"></i>'
+                }[type] || '<i class="fas fa-circle-info" style="color:#0d6efd"></i>';
+                icon.innerHTML = iconHtml;
+
+                // show actions if confirm mode
+                if (isConfirm) {
+                    actions.classList.remove('d-none');
+                    actions.classList.add('d-flex');
+                    actions.style.flexDirection = 'row';
+                    actions.style.marginTop = '.5rem';
+                    // make popup act like a dialog to assistive tech
+                    container.setAttribute('role', 'alertdialog');
+                    container.setAttribute('aria-modal', 'true');
+                } else {
+                    actions.classList.add('d-none');
+                    container.setAttribute('role', 'alert');
+                    container.removeAttribute('aria-modal');
+                }
+
+                // show
+                container.classList.remove('d-none');
+                void container.offsetWidth; // force reflow to enable transition
+                container.classList.add('visible');
+
+                var cleanup = function () {
+                    container.classList.remove('visible');
+                    setTimeout(function () {
+                        container.classList.add('d-none');
+                        // remove role/aria-modal if left set
+                        container.removeAttribute('aria-modal');
+                        container.setAttribute('role', 'alert');
+                    }, 260);
+                };
+
+                var invoked = false; // ensure callback only called once
+
+                var doCallback = function (result) {
+                    if (invoked) return;
+                    invoked = true;
+                    try {
+                        if (typeof callback === 'function') {
+                            callback(result);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                    }
+                };
+
+                // Handlers
+                var confirmHandler = function () {
+                    cleanup();
+                    // call callback(true) after hide transition
+                    setTimeout(function () { doCallback(true); }, 280);
+                };
+                var cancelHandler = function () {
+                    cleanup();
+                    setTimeout(function () { doCallback(false); }, 280);
+                };
+
+                // Attach handlers (use { once: true } to auto remove)
+                if (isConfirm) {
+                    confirmBtn && confirmBtn.addEventListener('click', confirmHandler, { once: true });
+                    cancelBtn && cancelBtn.addEventListener('click', cancelHandler, { once: true });
+                    // close button acts like cancel in confirm mode
+                    closeBtn && closeBtn.addEventListener('click', cancelHandler, { once: true });
+                } else {
+                    // non-confirm mode: close button simply hides and triggers callback (no param)
+                    var closeNonConfirm = function () {
+                        cleanup();
+                        setTimeout(function () { doCallback(); }, 280);
+                    };
+                    closeBtn && closeBtn.addEventListener('click', closeNonConfirm, { once: true });
+                }
+
+                // auto hide for non-confirm popups only (duration > 0)
+                if (!isConfirm && duration && duration > 0) {
+                    setTimeout(function () {
+                        cleanup();
+                        setTimeout(function () { doCallback(); }, 280);
+                    }, duration);
+                }
+
+            } catch (err) {
+                console.error('showGlobalPopup error', err);
+            }
+        };
+    })();
+</script>

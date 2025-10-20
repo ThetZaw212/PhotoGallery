@@ -30,8 +30,6 @@ public partial class PhotoGalleryDbContext : DbContext
 
     public virtual DbSet<Tag> Tags { get; set; }
 
-    public virtual DbSet<TokenClaim> TokenClaims { get; set; }
-
     public virtual DbSet<ViPhoto> ViPhotos { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
